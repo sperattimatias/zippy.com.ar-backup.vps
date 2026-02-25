@@ -1,0 +1,17 @@
+name: compose-smoke
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and boot stack smoke test
+        run: scripts/ci/compose-smoke.sh
