@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "docker compose -f infra/docker-compose.yml up --build",
     "down": "docker compose -f infra/docker-compose.yml down -v",
-    "logs": "docker compose -f infra/docker-compose.yml logs -f"
+    "logs": "docker compose -f infra/docker-compose.yml logs -f",
+    "check:config": "node scripts/ci/validate-config.mjs"
   }
 }
