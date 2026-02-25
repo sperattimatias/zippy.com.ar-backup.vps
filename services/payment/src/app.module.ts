@@ -9,6 +9,7 @@ import { PrismaService } from './prisma/prisma.service';
 import { JwtAccessGuard } from './common/jwt-access.guard';
 import { RolesGuard } from './common/roles.guard';
 import { PaymentsController } from './payments/payments.controller';
+import { PaymentMvpService } from './payments/payment-mvp.service';
 import { PaymentsService } from './payments/payments.service';
 
 @Module({
@@ -31,6 +32,6 @@ import { PaymentsService } from './payments/payments.service';
     LoggerModule.forRoot(defaultPinoConfig),
   ],
   controllers: [AppController, PaymentsController],
-  providers: [PrismaService, JwtAccessGuard, RolesGuard, PaymentsService],
+  providers: [PrismaService, JwtAccessGuard, RolesGuard, PaymentsService, PaymentMvpService],
 })
 export class AppModule {}

@@ -15,6 +15,13 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PaymentMvpStatus {
+  pending
+  paid
+  failed
+  refunded
+}
+
 enum RefundStatus {
   CREATED
   PROCESSING
@@ -75,6 +82,39 @@ enum HoldStatus {
   ACTIVE
   RELEASED
   EXPIRED
+}
+
+
+model PaymentMvp {
+  id                  String           @id @default(cuid())
+  ride_id             String
+  amount              Int
+  currency            String           @default("ARS")
+  status              PaymentMvpStatus @default(pending)
+  provider            String           @default("mock")
+  provider_payment_id String?
+  paid_at             DateTime?
+  failed_at           DateTime?
+  refunded_at         DateTime?
+  created_at          DateTime         @default(now())
+  updated_at          DateTime         @updatedAt
+
+  events              PaymentMvpEvent[]
+
+  @@index([ride_id, created_at])
+  @@index([status, created_at])
+}
+
+model PaymentMvpEvent {
+  id          String   @id @default(cuid())
+  payment_id  String
+  event_type  String
+  payload     Json?
+  created_at  DateTime @default(now())
+
+  payment     PaymentMvp @relation(fields: [payment_id], references: [id], onDelete: Cascade)
+
+  @@index([payment_id, created_at])
 }
 
 model TripPayment {

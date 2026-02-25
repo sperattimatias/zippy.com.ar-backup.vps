@@ -3,7 +3,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAccessGuard } from '../common/jwt-access.guard';
 import { Roles } from '../common/roles.decorator';
 import { RolesGuard } from '../common/roles.guard';
-import { AdminFinanceTripsFilterDto, AdminLedgerFilterDto, AdminRefundDto, AdminRefundsFilterDto, CreatePreferenceDto, ReconciliationDto, RevokeBonusLedgerDto } from '../dto/payment.dto';
+import { AdminFinanceTripsFilterDto, AdminLedgerFilterDto, AdminRefundDto, AdminRefundsFilterDto, CreatePaymentDto, CreatePreferenceDto, ReconciliationDto, RevokeBonusLedgerDto } from '../dto/payment.dto';
+import { PaymentMvpService } from './payment-mvp.service';
 import { PaymentsService } from './payments.service';
 
 type AuthReq = { user: { sub: string; roles: string[] }; body?: any; rawBody?: string };
@@ -12,7 +13,18 @@ type AuthReq = { user: { sub: string; roles: string[] }; body?: any; rawBody?: s
 @ApiBearerAuth()
 @Controller()
 export class PaymentsController {
-  constructor(private readonly payments: PaymentsService) {}
+  constructor(
+    private readonly payments: PaymentsService,
+    private readonly paymentMvp: PaymentMvpService,
+  ) {}
+
+
+  @Post('payment/create')
+  @UseGuards(JwtAccessGuard, RolesGuard)
+  @Roles('passenger')
+  createPayment(@Body() dto: CreatePaymentDto) {
+    return this.paymentMvp.createPayment(dto);
+  }
 
   @Post('payments/create-preference')
   @UseGuards(JwtAccessGuard, RolesGuard)

@@ -138,6 +138,12 @@ export class FraudCaseActionDto {
   @IsOptional() @IsString() assigned_to_user_id?: string;
 }
 
+
+export class InternalPaymentPaidDto {
+  @IsString() ride_id!: string;
+  @IsString() payment_id!: string;
+}
+
 export class CreateHoldDto {
   @IsString() user_id!: string;
   @IsEnum(HoldType) hold_type!: HoldType;

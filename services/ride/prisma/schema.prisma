@@ -191,6 +191,12 @@ enum RideStatus {
   cancelled
 }
 
+enum RidePaymentStatus {
+  unpaid
+  paid
+  refunded
+}
+
 enum HoldType {
   PAYOUT_HOLD
   FEATURE_LIMIT
@@ -215,6 +221,8 @@ model Ride {
   destination_lng    Float
   fare_estimated     Float
   fare_final         Float?
+  payment_status     RidePaymentStatus @default(unpaid)
+  paid_at            DateTime?
   requested_at       DateTime     @default(now())
   accepted_at        DateTime?
   arrived_at         DateTime?

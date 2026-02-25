@@ -943,6 +943,30 @@ export class RideService implements OnModuleInit {
     });
   }
 
+
+  async markRidePaid(rideId: string, paymentId: string) {
+    const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException('Ride not found');
+
+    const updated = await this.prisma.ride.update({
+      where: { id: rideId },
+      data: {
+        payment_status: 'paid',
+        paid_at: new Date(),
+      },
+    });
+
+    await this.prisma.rideLifecycleEvent.create({
+      data: {
+        ride_id: rideId,
+        event_type: 'ride.payment.marked_paid',
+        payload: { payment_id: paymentId } as any,
+      },
+    });
+
+    return updated;
+  }
+
   async listTripsRecent() { return this.prisma.trip.findMany({ orderBy: { created_at: 'desc' }, take: 100 }); }
   async tripDetail(id: string) {
     const trip = await this.prisma.trip.findUnique({ where: { id }, include: { events: { orderBy: { created_at: 'desc' } }, locations: { orderBy: { created_at: 'desc' }, take: 300 }, bids: true, safety_alerts: { orderBy: { created_at: 'desc' } }, safety_state: true } });
