@@ -77,10 +77,14 @@ services:
       PAYMENT_SERVICE_URL: http://payment:3004
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
     depends_on:
-      - auth
-      - ride
-      - driver
-      - payment
+      auth:
+        condition: service_healthy
+      ride:
+        condition: service_healthy
+      driver:
+        condition: service_healthy
+      payment:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -118,8 +122,10 @@ services:
       REFRESH_TOKEN_EXPIRES_DAYS: ${REFRESH_TOKEN_EXPIRES_DAYS}
       EMAIL_VERIFICATION_TTL_MIN: ${EMAIL_VERIFICATION_TTL_MIN}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3001/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -152,8 +158,10 @@ services:
       REDIS_URL: ${REDIS_URL}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3002/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -191,9 +199,12 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET}
       AUTH_SERVICE_URL: http://api-gateway:3000
     depends_on:
-      - postgres
-      - redis
-      - minio
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3003/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -226,8 +237,10 @@ services:
       REDIS_URL: ${REDIS_URL}
       RIDE_SERVICE_URL: http://ride:3002
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3004/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -259,7 +272,8 @@ services:
       NEXT_PUBLIC_API_GATEWAY_URL: https://api.${TRAEFIK_DOMAIN}
       API_GATEWAY_INTERNAL_URL: http://api-gateway:3000
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3005/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
