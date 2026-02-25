@@ -16,4 +16,4 @@ RUN npx prisma generate
 RUN npm run build
 
 EXPOSE 3001
-CMD ["node","dist/services/auth/src/main.js"]
+CMD ["npm", "run", "start"]
