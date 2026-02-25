@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DriverProfileStatus {
+  PENDING_DOCS
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum DriverDocumentType {
+  SELFIE
+  DNI_FRONT
+  DNI_BACK
+  LICENSE
+  INSURANCE
+  VEHICLE_REGISTRATION
+}
+
+enum DriverEventType {
+  DRIVER_REQUESTED
+  DOC_UPLOADED
+  STATUS_CHANGED
+  APPROVED
+  REJECTED
+  SUSPENDED
+  NOTE_ADDED
+}
+
+enum VehicleCategory {
+  MOTO
+  AUTO
+}
+
+model DriverProfile {
+  id                  String              @id @default(cuid())
+  user_id             String              @unique
+  status              DriverProfileStatus @default(PENDING_DOCS)
+  created_at          DateTime            @default(now())
+  updated_at          DateTime            @updatedAt
+  approved_at         DateTime?
+  approved_by_user_id String?
+  rejected_at         DateTime?
+  rejected_by_user_id String?
+  rejection_reason    String?
+  notes               String?
+  mp_account_id       String?
+
+  documents DriverDocument[]
+  events    DriverEvent[]
+  vehicle   Vehicle?
+}
+
+model DriverDocument {
+  id                String             @id @default(cuid())
+  driver_profile_id String
+  type              DriverDocumentType
+  object_key        String
+  mime_type         String
+  size_bytes        Int
+  sha256            String?
+  created_at        DateTime           @default(now())
+
+  driver_profile DriverProfile @relation(fields: [driver_profile_id], references: [id], onDelete: Cascade)
+
+  @@index([driver_profile_id, type])
+}
+
+model DriverEvent {
+  id                String          @id @default(cuid())
+  driver_profile_id String
+  actor_user_id     String
+  type              DriverEventType
+  payload_json      Json
+  created_at        DateTime        @default(now())
+
+  driver_profile DriverProfile @relation(fields: [driver_profile_id], references: [id], onDelete: Cascade)
+
+  @@index([driver_profile_id, created_at])
+}
+
+model Vehicle {
+  id                String          @id @default(cuid())
+  driver_profile_id String          @unique
+  category          VehicleCategory
+  brand             String?
+  model             String?
+  year              Int?
+  plate             String?
+  color             String?
+  created_at        DateTime        @default(now())
+
+  driver_profile DriverProfile @relation(fields: [driver_profile_id], references: [id], onDelete: Cascade)
+}

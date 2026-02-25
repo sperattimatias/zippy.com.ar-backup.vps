@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PaymentStatus {
+  CREATED
+  PENDING
+  APPROVED
+  REJECTED
+  REFUNDED
+}
+
+enum RefundStatus {
+  CREATED
+  PROCESSING
+  APPROVED
+  FAILED
+}
+
+enum SettlementStatus {
+  NOT_SETTLED
+  SETTLED
+  FAILED
+}
+
+enum LedgerEntryType {
+  TRIP_REVENUE
+  PLATFORM_COMMISSION
+  DRIVER_EARNING
+  BONUS_DISCOUNT
+  REFUND
+  REFUND_REVERSAL
+  COMMISSION_REVERSAL
+  DRIVER_NET_REVERSAL
+}
+
+enum LedgerActor {
+  DRIVER
+  PLATFORM
+}
+
+enum TripStatus {
+  DRAFT
+  REQUESTED
+  BIDDING
+  MATCHED
+  DRIVER_EN_ROUTE
+  ARRIVED
+  OTP_PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED_BY_PASSENGER
+  CANCELLED_BY_DRIVER
+  EXPIRED_NO_DRIVER
+}
+
+enum BonusStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum HoldType {
+  PAYOUT_HOLD
+  FEATURE_LIMIT
+  ACCOUNT_BLOCK
+}
+
+enum HoldStatus {
+  ACTIVE
+  RELEASED
+  EXPIRED
+}
+
+model TripPayment {
+  id                     String           @id @default(cuid())
+  trip_id                String           @unique
+  passenger_user_id      String
+  driver_user_id         String
+  amount_total           Int
+  currency               String           @default("ARS")
+  commission_bps_applied Int
+  commission_amount      Int
+  driver_net_amount      Int
+  mp_payment_id          String?
+  mp_preference_id       String?
+  refunded_amount        Int              @default(0)
+  refunded_at            DateTime?
+  is_fully_refunded      Boolean          @default(false)
+  status                 PaymentStatus    @default(CREATED)
+  settlement_status      SettlementStatus @default(NOT_SETTLED)
+  created_at             DateTime         @default(now())
+  updated_at             DateTime         @updatedAt
+  refunds                TripRefund[]
+
+  @@index([driver_user_id, created_at])
+}
+
+model TripRefund {
+  id               String       @id @default(cuid())
+  trip_payment_id  String
+  amount           Int
+  reason           String
+  status           RefundStatus @default(CREATED)
+  mp_refund_id     String?      @unique
+  idempotency_key  String?      @unique
+  payload_json     Json         @default("{}")
+  created_at       DateTime     @default(now())
+  updated_at       DateTime     @updatedAt
+
+  tripPayment      TripPayment  @relation(fields: [trip_payment_id], references: [id], onDelete: Cascade)
+
+  @@index([trip_payment_id, created_at])
+}
+
+model LedgerEntry {
+  id            String          @id @default(cuid())
+  actor_type    LedgerActor
+  actor_user_id String?
+  trip_id       String?
+  type          LedgerEntryType
+  amount        Int
+  reference_id  String?
+  payload_json  Json            @default("{}")
+  created_at    DateTime        @default(now())
+
+  @@index([actor_type, actor_user_id, created_at])
+}
+
+model DriverPayoutSummary {
+  driver_user_id       String   @id
+  total_gross          BigInt   @default(0)
+  total_commission     BigInt   @default(0)
+  total_bonus_discount BigInt   @default(0)
+  total_net            BigInt   @default(0)
+  updated_at           DateTime @updatedAt
+}
+
+enum BonusAdjustmentStatus {
+  PENDING
+  APPLIED
+}
+
+model BonusAdjustment {
+  id             String   @id @default(cuid())
+  driver_user_id String
+  trip_id        String
+  year           Int
+  month          Int
+  amount         Int
+  reason         String
+  status         BonusAdjustmentStatus   @default(PENDING)
+  payload_json   Json     @default("{}")
+  created_at     DateTime @default(now())
+
+  @@index([driver_user_id, year, month])
+}
+
+
+model Trip {
+  id                String    @id
+  passenger_user_id String
+  driver_user_id    String?
+  status            TripStatus
+  price_final       Int?
+  currency          String
+  completed_at      DateTime?
+
+  @@map("Trip")
+}
+
+model CommissionPolicy {
+  id         String   @id
+  key        String   @unique
+  value_json Json
+  updated_at DateTime
+
+  @@map("CommissionPolicy")
+}
+
+model MonthlyBonusLedger {
+  id             String     @id
+  driver_user_id String
+  year           Int
+  month          Int
+  discount_bps   Int
+  status         BonusStatus
+  starts_at      DateTime
+  ends_at        DateTime
+
+  @@map("MonthlyBonusLedger")
+}
+
+model DriverProfile {
+  id            String  @id
+  user_id       String  @unique
+  mp_account_id String?
+
+  @@map("DriverProfile")
+}
+
+
+model UserHold {
+  id         String     @id
+  user_id    String
+  hold_type  HoldType
+  status     HoldStatus
+  reason     String
+  starts_at  DateTime
+  ends_at    DateTime?
+  payload_json Json
+
+  @@map("UserHold")
+}
+
+
+enum ActorType {
+  DRIVER
+  PASSENGER
+}
+
+model ClientFingerprint {
+  id                      String    @id
+  user_id                 String
+  actor_type              ActorType
+  ip_hash                 String
+  user_agent_hash         String
+  device_fingerprint_hash String?
+  created_at              DateTime
+
+  @@map("ClientFingerprint")
+}
+
+enum FraudSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FraudSignalType {
+  REPEATED_PAIR_TRIPS
+  HIGH_VELOCITY_TRIPS
+  HIGH_VELOCITY_PAYMENTS
+  SHARED_IP_MULTIPLE_USERS
+  SHARED_DEVICE_FINGERPRINT
+  MULTIPLE_ACCOUNTS_SAME_DRIVER
+  EXCESSIVE_REFUNDS
+  REFUND_VELOCITY_HIGH
+  REFUND_RATIO_HIGH
+  PAYMENT_REJECT_RATE_HIGH
+  SUSPICIOUS_ROUTE_PATTERN
+  MANUAL_REVIEW_TRIGGER
+  RISK_DECAY
+}
+
+model FraudSignal {
+  id         String          @id
+  user_id    String?
+  trip_id    String?
+  payment_id String?
+  type       FraudSignalType
+  severity   FraudSeverity
+  score_delta Int
+  payload_json Json
+  created_at DateTime
+
+  @@map("FraudSignal")
+}

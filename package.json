@@ -1,0 +1,11 @@
+{
+  "name": "zippy-rideshare",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "dev": "docker compose -f infra/docker-compose.yml up --build",
+    "down": "docker compose -f infra/docker-compose.yml down -v",
+    "logs": "docker compose -f infra/docker-compose.yml logs -f"
+  }
+}

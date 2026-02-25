@@ -1,0 +1,234 @@
+name: zippy-rideshare
+
+services:
+  traefik:
+    image: traefik:v3.6.1
+    command:
+      - --providers.docker=true
+      - --providers.docker.endpoint=unix:///var/run/docker.sock
+      - --providers.docker.exposedbydefault=false
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.cloudflare.acme.dnschallenge=true
+      - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json
+      - --api.dashboard=true
+    ports:
+      - 80:80
+      - 443:443
+      - 127.0.0.1:8080:8080
+    environment:
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
+      DOCKER_API_VERSION: "1.53"
+      DOCKER_HOST: "unix:///var/run/docker.sock"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./traefik/letsencrypt:/letsencrypt
+    networks:
+      - zippy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - zippy
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - zippy
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    networks:
+      - zippy
+
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: apps/api-gateway/Dockerfile
+    working_dir: /app/apps/api-gateway
+    command: ["node","dist/apps/api-gateway/src/main.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      API_GATEWAY_PORT: 3000
+      AUTH_SERVICE_URL: http://auth:3001
+      RIDE_SERVICE_URL: http://ride:3002
+      DRIVER_SERVICE_URL: http://driver:3003
+      PAYMENT_SERVICE_URL: http://payment:3004
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+    depends_on:
+      - auth
+      - ride
+      - driver
+      - payment
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.api.rule: Host(`api.${TRAEFIK_DOMAIN}`)
+      traefik.http.routers.api.entrypoints: websecure
+      traefik.http.routers.api.tls: "true"
+      traefik.http.routers.api.tls.certresolver: cloudflare
+      traefik.http.routers.api.middlewares: security-headers@file
+      traefik.http.services.api.loadbalancer.server.port: "3000"
+    networks:
+      - zippy
+
+  auth:
+    build:
+      context: ..
+      dockerfile: services/auth/Dockerfile
+
+    command: ["node","dist/services/auth/src/main.js"]
+
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      AUTH_SERVICE_PORT: 3001
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN}
+      REFRESH_TOKEN_EXPIRES_DAYS: ${REFRESH_TOKEN_EXPIRES_DAYS}
+      EMAIL_VERIFICATION_TTL_MIN: ${EMAIL_VERIFICATION_TTL_MIN}
+    depends_on:
+      - postgres
+      - redis
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.auth.rule: Host(`auth.${TRAEFIK_DOMAIN}`)
+      traefik.http.routers.auth.entrypoints: websecure
+      traefik.http.routers.auth.tls: "true"
+      traefik.http.routers.auth.tls.certresolver: cloudflare
+      traefik.http.routers.auth.middlewares: security-headers@file
+      traefik.http.services.auth.loadbalancer.server.port: "3001"
+    networks:
+      - zippy
+
+  ride:
+    build:
+      context: ..
+      dockerfile: services/ride/Dockerfile
+    command: ["node","dist/services/ride/src/main.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      RIDE_SERVICE_PORT: 3002
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+    depends_on:
+      - postgres
+      - redis
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.ride.rule: Host(`ride.${TRAEFIK_DOMAIN}`)
+      traefik.http.routers.ride.entrypoints: websecure
+      traefik.http.routers.ride.tls: "true"
+      traefik.http.routers.ride.tls.certresolver: cloudflare
+      traefik.http.routers.ride.middlewares: security-headers@file
+      traefik.http.services.ride.loadbalancer.server.port: "3002"
+    networks:
+      - zippy
+
+  driver:
+    build:
+      context: ..
+      dockerfile: services/driver/Dockerfile
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      DRIVER_SERVICE_PORT: 3003
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_PORT: ${MINIO_PORT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      AUTH_SERVICE_URL: http://api-gateway:3000
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.driver.rule: Host(`driver.${TRAEFIK_DOMAIN}`)
+      traefik.http.routers.driver.entrypoints: websecure
+      traefik.http.routers.driver.tls: "true"
+      traefik.http.routers.driver.tls.certresolver: cloudflare
+      traefik.http.routers.driver.middlewares: security-headers@file
+      traefik.http.services.driver.loadbalancer.server.port: "3003"
+    networks:
+      - zippy
+
+  payment:
+    build:
+      context: ..
+      dockerfile: services/payment/Dockerfile
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      PAYMENT_SERVICE_PORT: 3004
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      RIDE_SERVICE_URL: http://ride:3002
+    depends_on:
+      - postgres
+      - redis
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.payment.rule: Host(`payment.${TRAEFIK_DOMAIN}`)
+      traefik.http.routers.payment.entrypoints: websecure
+      traefik.http.routers.payment.tls: "true"
+      traefik.http.routers.payment.tls.certresolver: cloudflare
+      traefik.http.routers.payment.middlewares: security-headers@file
+      traefik.http.services.payment.loadbalancer.server.port: "3004"
+    networks:
+      - zippy
+
+  admin-panel:
+    build:
+      context: ..
+      dockerfile: apps/admin-panel/Dockerfile
+      args:
+        NEXT_PUBLIC_API_GATEWAY_URL: https://api.${TRAEFIK_DOMAIN}
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      ADMIN_PANEL_PORT: 3005
+      NEXT_PUBLIC_API_GATEWAY_URL: https://api.${TRAEFIK_DOMAIN}
+      API_GATEWAY_INTERNAL_URL: http://api-gateway:3000
+    depends_on:
+      - api-gateway
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.admin.rule: Host(`admin.${TRAEFIK_DOMAIN}`)
+      traefik.http.routers.admin.entrypoints: websecure
+      traefik.http.routers.admin.tls: "true"
+      traefik.http.routers.admin.tls.certresolver: cloudflare
+      traefik.http.routers.admin.middlewares: security-headers@file
+      traefik.http.services.admin.loadbalancer.server.port: "3005"
+    networks:
+      - zippy
+
+networks:
+  zippy:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  minio_data:
