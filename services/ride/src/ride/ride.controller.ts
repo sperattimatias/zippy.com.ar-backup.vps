@@ -14,6 +14,8 @@ import {
   PresenceOnlineDto,
   PresencePingDto,
   RateTripDto,
+  RideCompleteMvpDto,
+  RideRequestMvpDto,
   SafetyAlertFilterDto,
   SafetyAlertUpdateDto,
   TripRequestDto,
@@ -64,6 +66,43 @@ export class RideController {
   @Get('drivers/commission/current')
   @Roles('driver')
   driverCurrentCommission(@Req() req: AuthReq) { return this.rideService.getDriverCurrentCommission(req.user.sub); }
+
+
+  @Post('ride/request')
+  @Roles('passenger')
+  rideRequest(@Req() req: AuthReq, @Body() dto: RideRequestMvpDto) {
+    return this.rideService.requestRide(req.user.sub, dto);
+  }
+
+  @Post('ride/:id/accept')
+  @Roles('driver')
+  rideAccept(@Req() req: AuthReq, @Param('id') id: string) {
+    return this.rideService.acceptRide(id, req.user.sub);
+  }
+
+  @Post('ride/:id/arrived')
+  @Roles('driver')
+  rideArrived(@Req() req: AuthReq, @Param('id') id: string) {
+    return this.rideService.arriveRide(id, req.user.sub);
+  }
+
+  @Post('ride/:id/start')
+  @Roles('driver')
+  rideStart(@Req() req: AuthReq, @Param('id') id: string) {
+    return this.rideService.startRide(id, req.user.sub);
+  }
+
+  @Post('ride/:id/complete')
+  @Roles('driver')
+  rideComplete(@Req() req: AuthReq, @Param('id') id: string, @Body() dto: RideCompleteMvpDto) {
+    return this.rideService.completeRide(id, req.user.sub, dto);
+  }
+
+  @Post('ride/:id/cancel')
+  @Roles('passenger')
+  rideCancel(@Req() req: AuthReq, @Param('id') id: string) {
+    return this.rideService.cancelRide(id, req.user.sub);
+  }
 
   @Post('trips/request')
   @Roles('passenger')
