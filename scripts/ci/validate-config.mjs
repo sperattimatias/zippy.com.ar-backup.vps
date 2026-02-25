@@ -44,7 +44,7 @@ if (extra.length) {
 
 const secretPlaceholders = {
   CF_DNS_API_TOKEN: ['replace-me', ''],
-  JWT_ACCESS_SECRET: ['change-me', 'replace-me', ''],
+  JWT_ACCESS_SECRET: ['change-me', 'replace-me', 'change-me-please-use-at-least-32-chars', ''],
 };
 
 for (const [key, allowedValues] of Object.entries(secretPlaceholders)) {
@@ -59,6 +59,14 @@ for (const [key, allowedValues] of Object.entries(secretPlaceholders)) {
       `Allowed placeholders: ${allowedValues.join(', ')}`,
     ]);
   }
+}
+
+
+const jwtSecret = envVars.get('JWT_ACCESS_SECRET') || '';
+if (jwtSecret && jwtSecret.length < 32) {
+  fail('JWT_ACCESS_SECRET in .env.example must be at least 32 chars to satisfy auth config validation', [
+    `Current length: ${jwtSecret.length}`,
+  ]);
 }
 
 if (process.exitCode !== 1) {
