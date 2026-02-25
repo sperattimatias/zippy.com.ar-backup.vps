@@ -18,7 +18,7 @@ ARG NEXT_PUBLIC_API_GATEWAY_URL
 ENV NEXT_PUBLIC_API_GATEWAY_URL=${NEXT_PUBLIC_API_GATEWAY_URL}
 COPY --from=deps /app/apps/admin-panel/node_modules ./node_modules
 COPY --from=build /app/apps/admin-panel/.next ./.next
-COPY --from=build /app/apps/admin-panel/public ./public
+RUN mkdir -p ./public
 COPY --from=build /app/apps/admin-panel/package.json ./package.json
 EXPOSE 3005
 CMD ["npm", "run", "start"]
