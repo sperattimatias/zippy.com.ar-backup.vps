@@ -34,6 +34,8 @@ import {
   PresenceOnlineDto,
   PresencePingDto,
   RateTripDto,
+  RideCompleteMvpDto,
+  RideRequestMvpDto,
   SafetyAlertFilterDto,
   SafetyAlertUpdateDto,
   TripRequestDto,
@@ -817,6 +819,129 @@ export class RideService implements OnModuleInit {
     return this.fraud.createHoldIfAbsent(dto.user_id, dto.hold_type, dto.reason, hours, actorUserId, { notes: dto.notes ?? null });
   }
   async releaseFraudHold(id: string, actorUserId: string) { return this.fraud.releaseHold(id, actorUserId); }
+
+
+  private async emitRideEvent(rideId: string, eventType: 'ride.requested' | 'ride.accepted' | 'ride.completed', payload?: Record<string, unknown>) {
+    await this.prisma.rideLifecycleEvent.create({
+      data: {
+        ride_id: rideId,
+        event_type: eventType,
+        payload: (payload ?? null) as any,
+      },
+    });
+  }
+
+  async requestRide(passengerUserId: string, dto: RideRequestMvpDto) {
+    const ride = await this.prisma.ride.create({
+      data: {
+        passenger_user_id: passengerUserId,
+        origin_lat: dto.origin_lat,
+        origin_lng: dto.origin_lng,
+        destination_lat: dto.destination_lat,
+        destination_lng: dto.destination_lng,
+        fare_estimated: dto.fare_estimated,
+      },
+    });
+
+    await this.emitRideEvent(ride.id, 'ride.requested', {
+      passenger_user_id: passengerUserId,
+      fare_estimated: dto.fare_estimated,
+    });
+
+    return ride;
+  }
+
+  async acceptRide(rideId: string, driverUserId: string) {
+    const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException('Ride not found');
+    if (ride.status !== 'requested') throw new BadRequestException('Ride is not available for acceptance');
+
+    const updated = await this.prisma.ride.update({
+      where: { id: rideId },
+      data: {
+        assigned_driver_id: driverUserId,
+        status: 'accepted',
+        accepted_at: new Date(),
+      },
+    });
+
+    await this.emitRideEvent(rideId, 'ride.accepted', {
+      driver_user_id: driverUserId,
+    });
+
+    return updated;
+  }
+
+  async arriveRide(rideId: string, driverUserId: string) {
+    const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException('Ride not found');
+    if (!ride.assigned_driver_id || ride.assigned_driver_id !== driverUserId) {
+      throw new ForbiddenException('Only assigned driver can change ride status');
+    }
+    if (ride.status !== 'accepted') throw new BadRequestException('Ride must be accepted before arriving');
+
+    return this.prisma.ride.update({
+      where: { id: rideId },
+      data: { status: 'arrived', arrived_at: new Date() },
+    });
+  }
+
+  async startRide(rideId: string, driverUserId: string) {
+    const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException('Ride not found');
+    if (!ride.assigned_driver_id || ride.assigned_driver_id !== driverUserId) {
+      throw new ForbiddenException('Only assigned driver can change ride status');
+    }
+    if (!['accepted', 'arrived'].includes(ride.status)) {
+      throw new BadRequestException('Ride must be accepted or arrived before start');
+    }
+
+    return this.prisma.ride.update({
+      where: { id: rideId },
+      data: { status: 'started', started_at: new Date() },
+    });
+  }
+
+  async completeRide(rideId: string, driverUserId: string, dto: RideCompleteMvpDto) {
+    const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException('Ride not found');
+    if (!ride.assigned_driver_id || ride.assigned_driver_id !== driverUserId) {
+      throw new ForbiddenException('Only assigned driver can change ride status');
+    }
+    if (ride.status !== 'started') throw new BadRequestException('Ride must be started before completion');
+
+    const updated = await this.prisma.ride.update({
+      where: { id: rideId },
+      data: {
+        status: 'completed',
+        fare_final: dto.fare_final,
+        completed_at: new Date(),
+      },
+    });
+
+    await this.emitRideEvent(rideId, 'ride.completed', {
+      driver_user_id: driverUserId,
+      fare_final: dto.fare_final,
+    });
+
+    return updated;
+  }
+
+  async cancelRide(rideId: string, passengerUserId: string) {
+    const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+    if (!ride) throw new NotFoundException('Ride not found');
+    if (ride.passenger_user_id !== passengerUserId) {
+      throw new ForbiddenException('Only passenger can cancel this ride');
+    }
+    if (!['requested', 'accepted', 'arrived'].includes(ride.status)) {
+      throw new BadRequestException('Ride cannot be cancelled after start');
+    }
+
+    return this.prisma.ride.update({
+      where: { id: rideId },
+      data: { status: 'cancelled', cancelled_at: new Date() },
+    });
+  }
 
   async listTripsRecent() { return this.prisma.trip.findMany({ orderBy: { created_at: 'desc' }, take: 100 }); }
   async tripDetail(id: string) {

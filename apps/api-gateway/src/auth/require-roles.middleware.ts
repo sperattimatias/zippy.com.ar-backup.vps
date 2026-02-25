@@ -22,7 +22,7 @@ export class RequireDriverMiddleware implements NestMiddleware {
 export class RequirePassengerOrDriverMiddleware implements NestMiddleware {
   use(req: any, _res: any, next: () => void) {
     const roles: string[] = req.user?.roles ?? [];
-    if (!roles.some((r) => ['passenger', 'driver', 'admin', 'sos'].includes(r))) {
+    if (!roles.some((r) => ['passenger', 'driver'].includes(r))) {
       throw new ForbiddenException('passenger/driver role required');
     }
     next();
@@ -30,11 +30,11 @@ export class RequirePassengerOrDriverMiddleware implements NestMiddleware {
 }
 
 @Injectable()
-export class RequireAdminOrSosMiddleware implements NestMiddleware {
+export class RequireAdminMiddleware implements NestMiddleware {
   use(req: any, _res: any, next: () => void) {
     const roles: string[] = req.user?.roles ?? [];
-    if (!roles.includes('admin') && !roles.includes('sos')) {
-      throw new ForbiddenException('admin/sos role required');
+    if (!roles.includes('admin')) {
+      throw new ForbiddenException('admin role required');
     }
     next();
   }
