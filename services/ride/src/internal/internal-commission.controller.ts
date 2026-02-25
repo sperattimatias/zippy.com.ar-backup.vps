@@ -1,30 +1,28 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ActorType, LevelTier } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { InternalPaymentPaidDto } from '../dto/ride.dto';
 import { LevelAndBonusService } from '../levels/level-bonus.service';
+import { RideService } from '../ride/ride.service';
 
 /**
- * Internal-only endpoint used by the payment service to compute commission bps
- * based on day-1 meritocracy (level tier + monthly bonuses + floor).
- *
- * NOTE: This controller is NOT exposed via the public gateway routes.
- * It lives on the ride service network.
+ * Internal-only endpoints used by other services.
  */
-@Controller('/internal/commission')
+@Controller('/internal')
 export class InternalCommissionController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly levels: LevelAndBonusService,
+    private readonly rides: RideService,
   ) {}
 
-  @Get('/driver/:driverUserId')
+  @Get('/commission/driver/:driverUserId')
   async getDriverCommission(
     @Param('driverUserId') driverUserId: string,
     @Query('at') at?: string,
   ) {
     const when = at ? new Date(at) : new Date();
 
-    // Resolve tier: use cached userLevel if computed recently, otherwise compute.
     const cached = await this.prisma.userLevel.findUnique({
       where: { user_id_actor_type: { user_id: driverUserId, actor_type: ActorType.DRIVER } },
     });
@@ -41,7 +39,6 @@ export class InternalCommissionController {
             : tiers.bronze,
     );
 
-    // Continuous meritocracy: micro-adjustment inside tier based on current score.
     const scoreRow = await this.prisma.userScore.findUnique({
       where: { user_id_actor_type: { user_id: driverUserId, actor_type: ActorType.DRIVER } },
     });
@@ -62,12 +59,8 @@ export class InternalCommissionController {
     }
     if (maxMicro > 0) microDiscount = Math.min(microDiscount, maxMicro);
 
-    // Apply active monthly bonus discount (and floor) via existing service.
-    // We keep the floor logic centralized in LevelAndBonusService.
     const bonus = await this.levels.getActiveCommissionBps(driverUserId, when);
 
-    // bonus.default_bps is the legacy policy; we override with tierBps.
-    // Apply the same discount and floor.
     const rules = await this.prisma.commissionPolicy.findUnique({ where: { key: 'bonus_rules' } });
     const floor = Number((rules?.value_json as any)?.commission_floor_bps ?? 200);
     const effective = Math.max(tierBps - microDiscount - (bonus.discount_bps ?? 0), floor);
@@ -84,5 +77,10 @@ export class InternalCommissionController {
       effective_bps: effective,
       bonus_valid_until: bonus.bonus_valid_until,
     };
+  }
+
+  @Post('/payments/paid')
+  markRidePaid(@Body() dto: InternalPaymentPaidDto) {
+    return this.rides.markRidePaid(dto.ride_id, dto.payment_id);
   }
 }

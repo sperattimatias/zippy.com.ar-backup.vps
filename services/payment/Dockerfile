@@ -19,4 +19,4 @@ RUN if [ -f "./prisma/schema.prisma" ]; then npx prisma generate; fi
 RUN npm run build
 
 EXPOSE 3004
-CMD ["npm", "run", "start:prod"]
+CMD ["npm", "run", "start"]

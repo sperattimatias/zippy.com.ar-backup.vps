@@ -48,7 +48,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(200)
-  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Login and issue access+refresh tokens' })
   login(
     @Body() dto: LoginDto,
@@ -60,6 +60,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(200)
+  @Throttle({ default: { ttl: 60000, limit: 20 } })
   @ApiOperation({ summary: 'Rotate refresh token and issue new access+refresh pair' })
   refresh(
     @Body() dto: RefreshDto,

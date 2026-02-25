@@ -2,7 +2,7 @@ import { Injectable, NestMiddleware, UnauthorizedException } from '@nestjs/commo
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 
-type UserClaims = { sub: string; email: string; roles: string[] };
+type UserClaims = { sub: string; email: string; roles?: string[] };
 
 @Injectable()
 export class JwtClaimsMiddleware implements NestMiddleware {
@@ -14,10 +14,22 @@ export class JwtClaimsMiddleware implements NestMiddleware {
   async use(req: any, _res: any, next: () => void) {
     const auth = req.headers.authorization as string | undefined;
     if (!auth?.startsWith('Bearer ')) throw new UnauthorizedException('Missing bearer token');
+
     const token = auth.slice(7);
-    req.user = (await this.jwtService.verifyAsync(token, {
+    const claims = (await this.jwtService.verifyAsync(token, {
       secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
     })) as UserClaims;
+
+    const roles = Array.isArray(claims.roles) ? claims.roles : [];
+
+    req.user = {
+      ...claims,
+      roles,
+    };
+
+    req.headers['x-user-id'] = claims.sub;
+    req.headers['x-user-roles'] = roles.join(',');
+
     next();
   }
 }

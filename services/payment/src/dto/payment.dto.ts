@@ -1,6 +1,12 @@
 import { LedgerActor, PaymentStatus } from '@prisma/client';
 import { IsDateString, IsEnum, IsInt, IsOptional, IsPositive, IsString } from 'class-validator';
 
+
+export class CreatePaymentDto {
+  @IsString() ride_id!: string;
+  @IsInt() @IsPositive() amount!: number;
+}
+
 export class CreatePreferenceDto {
   @IsString() trip_id!: string;
 }

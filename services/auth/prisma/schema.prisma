@@ -12,6 +12,13 @@ enum UserStatus {
   SUSPENDED
 }
 
+enum RoleName {
+  passenger
+  driver
+  admin
+  sos
+}
+
 model User {
   id                 String                  @id @default(cuid())
   email              String                  @unique
@@ -27,7 +34,7 @@ model User {
 
 model Role {
   id    String     @id @default(cuid())
-  name  String     @unique
+  name  RoleName   @unique
   users UserRole[]
 }
 

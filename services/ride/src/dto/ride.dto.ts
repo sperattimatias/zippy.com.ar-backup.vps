@@ -1,5 +1,5 @@
 import { ActorType, CancelReason, FraudCaseStatus, FraudSeverity, GeoZoneType, HoldType, LevelTier, PremiumZoneType, RestrictionReason, RestrictionStatus, SafetyAlertStatus, VehicleCategory } from '@prisma/client';
-import { IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, IsPositive, Max, Min } from 'class-validator';
 
 export class PresenceOnlineDto { @IsNumber() lat!: number; @IsNumber() lng!: number; @IsEnum(VehicleCategory) category!: VehicleCategory; }
 export class PresencePingDto { @IsNumber() lat!: number; @IsNumber() lng!: number; }
@@ -14,6 +14,19 @@ export class TripRequestDto {
   @IsEnum(VehicleCategory) category!: VehicleCategory;
   @IsOptional() @IsNumber() distance_km?: number;
   @IsOptional() @IsInt() eta_minutes?: number;
+}
+
+
+export class RideRequestMvpDto {
+  @IsNumber() origin_lat!: number;
+  @IsNumber() origin_lng!: number;
+  @IsNumber() destination_lat!: number;
+  @IsNumber() destination_lng!: number;
+  @IsNumber() @IsPositive() fare_estimated!: number;
+}
+
+export class RideCompleteMvpDto {
+  @IsNumber() @IsPositive() fare_final!: number;
 }
 
 export class CreateBidDto { @IsInt() @Min(1) price_offer!: number; @IsOptional() @IsInt() @Min(1) @Max(180) eta_to_pickup_minutes?: number; }
@@ -123,6 +136,12 @@ export class FraudCaseFilterDto {
 export class FraudCaseActionDto {
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsString() assigned_to_user_id?: string;
+}
+
+
+export class InternalPaymentPaidDto {
+  @IsString() ride_id!: string;
+  @IsString() payment_id!: string;
 }
 
 export class CreateHoldDto {
