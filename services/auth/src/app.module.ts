@@ -18,6 +18,7 @@ import { JwtAccessGuard } from './common/jwt-access.guard';
       validationSchema: Joi.object({
         NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
         LOG_LEVEL: Joi.string().default('info'),
+        CORS_ORIGIN: Joi.string().default('*'),
         AUTH_SERVICE_PORT: Joi.number().default(3001),
         DATABASE_URL: Joi.string().required(),
         REDIS_URL: Joi.string().uri().required(),

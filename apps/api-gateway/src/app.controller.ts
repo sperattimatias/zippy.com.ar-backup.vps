@@ -19,6 +19,21 @@ export class AppController {
     };
   }
 
+
+  @Public()
+  @Get('health/live')
+  @ApiOperation({ summary: 'Gateway liveness probe' })
+  liveness() {
+    return { status: 'ok', service: 'api-gateway', probe: 'liveness', timestamp: new Date().toISOString() };
+  }
+
+  @Public()
+  @Get('health/ready')
+  @ApiOperation({ summary: 'Gateway readiness probe' })
+  readiness() {
+    return { status: 'ok', service: 'api-gateway', probe: 'readiness', uptime_seconds: process.uptime(), timestamp: new Date().toISOString() };
+  }
+
   @Get('admin')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('admin')

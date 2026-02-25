@@ -99,6 +99,7 @@ const driverTripRoutes: RouteInfo[] = [
       validationSchema: Joi.object({
         NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
         LOG_LEVEL: Joi.string().default('info'),
+        CORS_ORIGIN: Joi.string().default('*'),
         API_GATEWAY_PORT: Joi.number().default(3000),
         AUTH_SERVICE_URL: Joi.string().uri().required(),
         RIDE_SERVICE_URL: Joi.string().uri().required(),
