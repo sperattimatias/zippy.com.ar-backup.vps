@@ -20,6 +20,7 @@ import { RolesGuard } from './common/roles.guard';
       validationSchema: Joi.object({
         NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
         LOG_LEVEL: Joi.string().default('info'),
+        CORS_ORIGIN: Joi.string().default('*'),
         DRIVER_SERVICE_PORT: Joi.number().default(3003),
         DATABASE_URL: Joi.string().required(),
         REDIS_URL: Joi.string().uri().required(),

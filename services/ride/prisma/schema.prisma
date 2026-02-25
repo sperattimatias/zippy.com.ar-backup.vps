@@ -182,6 +182,21 @@ enum FraudCaseStatus {
   DISMISSED
 }
 
+enum RideStatus {
+  requested
+  accepted
+  arrived
+  started
+  completed
+  cancelled
+}
+
+enum RidePaymentStatus {
+  unpaid
+  paid
+  refunded
+}
+
 enum HoldType {
   PAYOUT_HOLD
   FEATURE_LIMIT
@@ -192,6 +207,48 @@ enum HoldStatus {
   ACTIVE
   RELEASED
   EXPIRED
+}
+
+
+model Ride {
+  id                 String       @id @default(cuid())
+  passenger_user_id  String
+  assigned_driver_id String?
+  status             RideStatus   @default(requested)
+  origin_lat         Float
+  origin_lng         Float
+  destination_lat    Float
+  destination_lng    Float
+  fare_estimated     Float
+  fare_final         Float?
+  payment_status     RidePaymentStatus @default(unpaid)
+  paid_at            DateTime?
+  requested_at       DateTime     @default(now())
+  accepted_at        DateTime?
+  arrived_at         DateTime?
+  started_at         DateTime?
+  completed_at       DateTime?
+  cancelled_at       DateTime?
+  created_at         DateTime     @default(now())
+  updated_at         DateTime     @updatedAt
+
+  events             RideLifecycleEvent[]
+
+  @@index([passenger_user_id, created_at])
+  @@index([assigned_driver_id, created_at])
+  @@index([status, created_at])
+}
+
+model RideLifecycleEvent {
+  id         String   @id @default(cuid())
+  ride_id    String
+  event_type String
+  payload    Json?
+  created_at DateTime @default(now())
+
+  ride       Ride     @relation(fields: [ride_id], references: [id], onDelete: Cascade)
+
+  @@index([ride_id, created_at])
 }
 
 model Trip {

@@ -1,12 +1,14 @@
 import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from './auth/auth.guard';
+import { Public } from './auth/public.decorator';
 import { Roles } from './auth/roles.decorator';
 import { RolesGuard } from './auth/roles.guard';
 
 @ApiTags('gateway')
 @Controller()
 export class AppController {
+  @Public()
   @Get('health')
   @ApiOperation({ summary: 'Gateway health check' })
   health() {
@@ -17,15 +19,68 @@ export class AppController {
     };
   }
 
-  @Get('admin/ping')
+
+  @Public()
+  @Get('health/live')
+  @ApiOperation({ summary: 'Gateway liveness probe' })
+  liveness() {
+    return { status: 'ok', service: 'api-gateway', probe: 'liveness', timestamp: new Date().toISOString() };
+  }
+
+  @Public()
+  @Get('health/ready')
+  @ApiOperation({ summary: 'Gateway readiness probe' })
+  readiness() {
+    return { status: 'ok', service: 'api-gateway', probe: 'readiness', uptime_seconds: process.uptime(), timestamp: new Date().toISOString() };
+  }
+
+  @Get('admin')
   @UseGuards(AuthGuard, RolesGuard)
-  @Roles('admin', 'sos')
+  @Roles('admin')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Protected ping route only for admin/sos roles' })
-  adminPing(@Req() req: { user: { email: string; roles: string[] } }) {
+  @ApiOperation({ summary: 'Admin-only protected route example' })
+  admin(@Req() req: { user: { sub: string; roles: string[] } }) {
     return {
-      message: 'pong',
-      email: req.user.email,
+      route: 'admin',
+      user_id: req.user.sub,
+      roles: req.user.roles,
+    };
+  }
+
+  @Get('driver')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('driver')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Driver-only protected route example' })
+  driver(@Req() req: { user: { sub: string; roles: string[] } }) {
+    return {
+      route: 'driver',
+      user_id: req.user.sub,
+      roles: req.user.roles,
+    };
+  }
+
+  @Get('ride')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('passenger', 'driver')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Passenger/driver protected route example' })
+  ride(@Req() req: { user: { sub: string; roles: string[] } }) {
+    return {
+      route: 'ride',
+      user_id: req.user.sub,
+      roles: req.user.roles,
+    };
+  }
+
+  @Get('payment')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Authenticated-only protected route example' })
+  payment(@Req() req: { user: { sub: string; roles: string[] } }) {
+    return {
+      route: 'payment',
+      user_id: req.user.sub,
       roles: req.user.roles,
     };
   }

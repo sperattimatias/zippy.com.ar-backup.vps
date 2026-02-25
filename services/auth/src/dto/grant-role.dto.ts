@@ -5,6 +5,6 @@ export class GrantRoleDto {
   user_id!: string;
 
   @IsString()
-  @IsIn(['driver'])
-  role!: 'driver';
+  @IsIn(['passenger', 'driver', 'admin', 'sos'])
+  role!: 'passenger' | 'driver' | 'admin' | 'sos';
 }

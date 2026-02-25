@@ -9,6 +9,7 @@ import { PrismaService } from './prisma/prisma.service';
 import { JwtAccessGuard } from './common/jwt-access.guard';
 import { RolesGuard } from './common/roles.guard';
 import { PaymentsController } from './payments/payments.controller';
+import { PaymentMvpService } from './payments/payment-mvp.service';
 import { PaymentsService } from './payments/payments.service';
 
 @Module({
@@ -18,6 +19,7 @@ import { PaymentsService } from './payments/payments.service';
       validationSchema: Joi.object({
         NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
         LOG_LEVEL: Joi.string().default('info'),
+        CORS_ORIGIN: Joi.string().default('*'),
         PAYMENT_SERVICE_PORT: Joi.number().default(3004),
         DATABASE_URL: Joi.string().required(),
         REDIS_URL: Joi.string().uri().required(),
@@ -31,6 +33,6 @@ import { PaymentsService } from './payments/payments.service';
     LoggerModule.forRoot(defaultPinoConfig),
   ],
   controllers: [AppController, PaymentsController],
-  providers: [PrismaService, JwtAccessGuard, RolesGuard, PaymentsService],
+  providers: [PrismaService, JwtAccessGuard, RolesGuard, PaymentsService, PaymentMvpService],
 })
 export class AppModule {}

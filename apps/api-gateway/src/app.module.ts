@@ -18,7 +18,7 @@ import { AuthGuard } from './auth/auth.guard';
 import { RolesGuard } from './auth/roles.guard';
 import { JwtClaimsMiddleware } from './auth/jwt-claims.middleware';
 import {
-  RequireAdminOrSosMiddleware,
+  RequireAdminMiddleware,
   RequireDriverMiddleware,
   RequirePassengerMiddleware,
   RequirePassengerOrDriverMiddleware,
@@ -65,10 +65,6 @@ const adminBonusesRoutes: RouteInfo[] = [
 const adminPoliciesRoutes: RouteInfo[] = [{ path: 'api/admin/policies/:key', method: RequestMethod.ALL }];
 const driverCommissionRoutes: RouteInfo[] = [{ path: 'api/drivers/commission/current', method: RequestMethod.ALL }];
 const paymentRoutes: RouteInfo[] = [{ path: 'api/payments/(.*)', method: RequestMethod.ALL }];
-const paymentCreatePreferenceRoutes: RouteInfo[] = [{ path: 'api/payments/payments/create-preference', method: RequestMethod.POST }];
-const paymentDriverFinanceRoutes: RouteInfo[] = [{ path: 'api/payments/drivers/finance/(.*)', method: RequestMethod.ALL }];
-const paymentAdminFinanceRoutes: RouteInfo[] = [{ path: 'api/payments/admin/finance/(.*)', method: RequestMethod.ALL }];
-const paymentAdminPaymentRoutes: RouteInfo[] = [{ path: 'api/payments/admin/payments/(.*)', method: RequestMethod.ALL }];
 
 const passengerTripRoutes: RouteInfo[] = [
   { path: 'api/trips/request', method: RequestMethod.POST },
@@ -103,6 +99,7 @@ const driverTripRoutes: RouteInfo[] = [
       validationSchema: Joi.object({
         NODE_ENV: Joi.string().valid('development', 'test', 'production').default('development'),
         LOG_LEVEL: Joi.string().default('info'),
+        CORS_ORIGIN: Joi.string().default('*'),
         API_GATEWAY_PORT: Joi.number().default(3000),
         AUTH_SERVICE_URL: Joi.string().uri().required(),
         RIDE_SERVICE_URL: Joi.string().uri().required(),
@@ -121,9 +118,9 @@ const driverTripRoutes: RouteInfo[] = [
     RolesGuard,
     Reflector,
     JwtClaimsMiddleware,
-    RequirePassengerMiddleware,
     RequireDriverMiddleware,
-    RequireAdminOrSosMiddleware,
+    RequirePassengerMiddleware,
+    RequireAdminMiddleware,
     RequirePassengerOrDriverMiddleware,
     {
       provide: APP_GUARD,
@@ -133,10 +130,10 @@ const driverTripRoutes: RouteInfo[] = [
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(JwtClaimsMiddleware, RequirePassengerOrDriverMiddleware).forRoutes(...driverRoutes, ...publicBadgeRoutes);
+    consumer.apply(JwtClaimsMiddleware, RequireDriverMiddleware).forRoutes(...driverRoutes, ...publicBadgeRoutes);
 
     consumer
-      .apply(JwtClaimsMiddleware, RequireAdminOrSosMiddleware)
+      .apply(JwtClaimsMiddleware, RequireAdminMiddleware)
       .forRoutes(
         ...adminDriverRoutes,
         ...adminTripsRoutes,
@@ -157,10 +154,9 @@ export class AppModule implements NestModule {
     consumer.apply(JwtClaimsMiddleware, RequireDriverMiddleware).forRoutes(...driverPresenceRoutes, ...driverCommissionRoutes);
     consumer.apply(JwtClaimsMiddleware, RequirePassengerMiddleware).forRoutes(...passengerTripRoutes);
     consumer.apply(JwtClaimsMiddleware, RequireDriverMiddleware).forRoutes(...driverTripRoutes);
+    consumer.apply(JwtClaimsMiddleware, RequirePassengerOrDriverMiddleware).forRoutes(...rideRoutes, ...tripsRoutes);
+    consumer.apply(JwtClaimsMiddleware).forRoutes(...paymentRoutes);
     consumer.apply(attachClientFingerprintHeaders).forRoutes(...tripsRoutes, ...paymentRoutes);
-    consumer.apply(JwtClaimsMiddleware, RequirePassengerMiddleware).forRoutes(...paymentCreatePreferenceRoutes);
-    consumer.apply(JwtClaimsMiddleware, RequireDriverMiddleware).forRoutes(...paymentDriverFinanceRoutes);
-    consumer.apply(JwtClaimsMiddleware, RequireAdminOrSosMiddleware).forRoutes(...paymentAdminFinanceRoutes, ...paymentAdminPaymentRoutes);
 
     consumer
       .apply(
