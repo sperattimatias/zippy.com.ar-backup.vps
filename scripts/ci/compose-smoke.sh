@@ -47,9 +47,24 @@ docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --build "${APP_SE
 
 echo "[compose-smoke] Waiting for app service health checks"
 for svc in "${HEALTH_SERVICES[@]}"; do
-  cid="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -q "$svc")"
+  cid=""
+  for _ in $(seq 1 12); do
+    cid="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -q "$svc")"
+    [[ -n "$cid" ]] && break
+    sleep 2
+  done
+
   if [[ -z "$cid" ]]; then
-    echo "❌ Service $svc has no running container"
+    any_cid="$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps -aq "$svc")"
+    if [[ -n "$any_cid" ]]; then
+      state="$(docker inspect -f '{{.State.Status}}' "$any_cid" 2>/dev/null || echo unknown)"
+      exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$any_cid" 2>/dev/null || echo unknown)"
+      echo "❌ Service $svc is not running (state=$state exit_code=$exit_code)"
+      docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" logs "$svc" || true
+    else
+      echo "❌ Service $svc has no container instance"
+      docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps || true
+    fi
     exit 1
   fi
 
