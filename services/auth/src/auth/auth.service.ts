@@ -17,6 +17,10 @@ import { VerifyEmailDto } from '../dto/verify-email.dto';
 import { RefreshDto } from '../dto/refresh.dto';
 import { LogoutDto } from '../dto/logout.dto';
 
+type SupportedRole = 'passenger' | 'driver' | 'admin' | 'sos';
+
+const SUPPORTED_ROLES: SupportedRole[] = ['passenger', 'driver', 'admin', 'sos'];
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -37,7 +41,36 @@ export class AuthService {
     return randomBytes(64).toString('base64url');
   }
 
-  private async issueTokens(userId: string, email: string, roles: string[], meta?: { userAgent?: string; ip?: string }) {
+  private async ensureRole(role: SupportedRole) {
+    return this.prisma.role.upsert({
+      where: { name: role },
+      create: { name: role },
+      update: {},
+    });
+  }
+
+  private serializeUser(user: {
+    id: string;
+    email: string;
+    status: UserStatus;
+    email_verified_at: Date | null;
+    roles: { role: { name: string } }[];
+  }) {
+    return {
+      id: user.id,
+      email: user.email,
+      status: user.status,
+      email_verified_at: user.email_verified_at,
+      roles: user.roles.map((ur) => ur.role.name),
+    };
+  }
+
+  private async issueTokens(
+    userId: string,
+    email: string,
+    roles: string[],
+    meta?: { userAgent?: string; ip?: string },
+  ) {
     const accessSecret = this.configService.getOrThrow<string>('JWT_ACCESS_SECRET');
     const accessExpiresIn = this.configService.get<string>('JWT_ACCESS_EXPIRES_IN', '15m');
     const refreshDays = this.configService.get<number>('REFRESH_TOKEN_EXPIRES_DAYS', 30);
@@ -67,28 +100,28 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const password_hash = await argon2.hash(dto.password, { type: argon2.argon2id });
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email.toLowerCase(),
-        password_hash,
-        status: UserStatus.ACTIVE,
-      },
-    }).catch(() => {
-      throw new BadRequestException('Email already registered');
-    });
+    const user = await this.prisma.user
+      .create({
+        data: {
+          email: dto.email.toLowerCase(),
+          password_hash,
+          status: UserStatus.ACTIVE,
+        },
+      })
+      .catch(() => {
+        throw new BadRequestException('Email already registered');
+      });
 
-    const passengerRole = await this.prisma.role.upsert({
-      where: { name: 'passenger' },
-      create: { name: 'passenger' },
-      update: {},
+    const passengerRole = await this.ensureRole('passenger');
+    await this.prisma.userRole.create({
+      data: { user_id: user.id, role_id: passengerRole.id },
     });
-
-    await this.prisma.userRole.create({ data: { user_id: user.id, role_id: passengerRole.id } });
 
     const code = this.generateVerificationCode();
     const code_hash = this.sha256(code);
     const ttlMin = this.configService.get<number>('EMAIL_VERIFICATION_TTL_MIN', 10);
 
+    await this.prisma.emailVerificationCode.deleteMany({ where: { user_id: user.id } });
     await this.prisma.emailVerificationCode.create({
       data: {
         user_id: user.id,
@@ -97,16 +130,22 @@ export class AuthService {
       },
     });
 
+    const response: Record<string, string> = {
+      message: 'registered',
+      email: user.email,
+    };
+
     if (this.configService.get<string>('NODE_ENV') !== 'production') {
-      // Only in dev
-      console.info(`[DEV] verification code for ${user.email}: ${code}`);
+      response.verification_code = code;
     }
 
-    return { message: 'registered', email: user.email };
+    return response;
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+    });
     if (!user) throw new NotFoundException('User not found');
 
     const record = await this.prisma.emailVerificationCode.findFirst({
@@ -127,10 +166,13 @@ export class AuthService {
       throw new UnauthorizedException('Invalid code');
     }
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { email_verified_at: new Date() },
-    });
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { email_verified_at: new Date() },
+      }),
+      this.prisma.emailVerificationCode.deleteMany({ where: { user_id: user.id } }),
+    ]);
 
     return { message: 'email verified' };
   }
@@ -150,7 +192,12 @@ export class AuthService {
 
     const roles = user.roles.map((ur) => ur.role.name);
     const tokens = await this.issueTokens(user.id, user.email, roles, meta);
-    return tokens;
+
+    return {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      user: this.serializeUser(user),
+    };
   }
 
   async refresh(dto: RefreshDto, meta?: { userAgent?: string; ip?: string }) {
@@ -163,6 +210,7 @@ export class AuthService {
     if (!existing) throw new UnauthorizedException('Refresh token invalid');
     if (existing.revoked_at) throw new UnauthorizedException('Refresh token revoked');
     if (existing.expires_at < new Date()) throw new UnauthorizedException('Refresh token expired');
+    if (!existing.user.email_verified_at) throw new ForbiddenException('Email not verified');
 
     const roles = existing.user.roles.map((ur) => ur.role.name);
     const next = await this.issueTokens(existing.user.id, existing.user.email, roles, meta);
@@ -172,14 +220,20 @@ export class AuthService {
       data: { revoked_at: new Date(), replaced_by_token_id: next.refresh_token_id },
     });
 
-    return { access_token: next.access_token, refresh_token: next.refresh_token };
+    return {
+      access_token: next.access_token,
+      refresh_token: next.refresh_token,
+      user: this.serializeUser(existing.user),
+    };
   }
 
   async logout(dto: LogoutDto) {
     if (dto.all) {
       if (!dto.refresh_token) return { message: 'nothing to revoke' };
       const tokenHash = this.sha256(dto.refresh_token);
-      const existing = await this.prisma.refreshToken.findFirst({ where: { token_hash: tokenHash } });
+      const existing = await this.prisma.refreshToken.findFirst({
+        where: { token_hash: tokenHash },
+      });
       if (!existing) return { message: 'nothing to revoke' };
       await this.prisma.refreshToken.updateMany({
         where: { user_id: existing.user_id, revoked_at: null },
@@ -199,12 +253,15 @@ export class AuthService {
     return { message: 'logged out' };
   }
 
-  
-  async grantRole(userId: string, roleName: 'driver') {
+  async grantRole(userId: string, roleName: string) {
+    if (!SUPPORTED_ROLES.includes(roleName as SupportedRole)) {
+      throw new BadRequestException('Unsupported role');
+    }
+
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    const role = await this.prisma.role.upsert({ where: { name: roleName }, create: { name: roleName }, update: {} });
+    const role = await this.ensureRole(roleName as SupportedRole);
     await this.prisma.userRole.upsert({
       where: { user_id_role_id: { user_id: userId, role_id: role.id } },
       create: { user_id: userId, role_id: role.id },
@@ -213,19 +270,14 @@ export class AuthService {
 
     return { message: 'role granted', user_id: userId, role: roleName };
   }
-async me(userId: string) {
+
+  async me(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { roles: { include: { role: true } } },
     });
     if (!user) throw new NotFoundException('User not found');
 
-    return {
-      id: user.id,
-      email: user.email,
-      status: user.status,
-      email_verified_at: user.email_verified_at,
-      roles: user.roles.map((ur) => ur.role.name),
-    };
+    return this.serializeUser(user);
   }
 }
